@@ -2,108 +2,243 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GitHub Pages テスト</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>AR</title>
 <style>
 :root {
---bg: #f6f5f1;
---fg: #1f1f1f;
---muted: #6b6b6b;
---card: #ffffff;
---line: #e3e1da;
---accent: #2f6f5e;
-}
-@media (prefers-color-scheme: dark) {
-:root {
---bg: #161616;
---fg: #ecebe6;
---muted: #9a9a9a;
---card: #1f1f1f;
---line: #2e2e2e;
---accent: #6fc2a8;
-}
+  --bg: #111;
+  --fg: #f4f1ea;
+  --muted: #a9a59c;
+  --accent: #f5c400;
 }
 * { box-sizing: border-box; }
-body {
-margin: 0;
-min-height: 100vh;
-display: grid;
-place-items: center;
-padding: 24px 16px;
-background: var(--bg);
-color: var(--fg);
-font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-line-height: 1.6;
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
 }
-main {
-width: 100%;
-max-width: 520px;
-background: var(--card);
-border: 1px solid var(--line);
-border-radius: 16px;
-padding: 28px 24px;
+#ar {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
 }
-.status {
-display: inline-flex;
-align-items: center;
-gap: 8px;
-font-size: 13px;
-color: var(--accent);
-font-weight: 600;
+.screen {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  text-align: center;
+  z-index: 10;
 }
-.dot {
-width: 8px; height: 8px; border-radius: 50%;
-background: var(--accent);
-animation: pulse 1.6s ease-in-out infinite;
-}
-@keyframes pulse { 50% { opacity: .3; } }
-h1 { margin: 12px 0 4px; font-size: 26px; }
-p.lead { margin: 0 0 20px; color: var(--muted); }
-dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; font-size: 14px; }
-dt { color: var(--muted); }
-dd { margin: 0; word-break: break-all; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+#start { background: var(--bg); }
+#start h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: .04em; }
+#start p { margin: 0 0 28px; color: var(--muted); line-height: 1.7; font-size: 14px; }
 button {
-margin-top: 22px;
-padding: 10px 16px;
-border: 0;
-border-radius: 10px;
-background: var(--accent);
-color: var(--card);
-font: inherit;
-font-weight: 600;
-cursor: pointer;
+  padding: 14px 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #111;
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
 }
-#count { margin-left: 10px; color: var(--muted); font-size: 14px; }
+button:disabled { opacity: .5; }
+#msg { margin-top: 16px; color: var(--muted); font-size: 13px; min-height: 1em; }
+
+/* 内カメ画面 */
+#selfie {
+  display: none;
+  background: #000;
+  padding: 0;
+}
+#selfie.on { display: block; }
+#selfie video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+#selfie button {
+  position: absolute;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+}
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+  }
+}
+</script>
 </head>
 <body>
-<main>
-<span class="status"><span class="dot"></span>公開中</span>
-<h1>Hello, GitHub Pages</h1>
-<p class="lead">このページが見えていれば、デプロイは成功しています。</p>
+<div id="ar"></div>
 
-<dl>
-<dt>URL</dt><dd id="url">—</dd>
-<dt>表示時刻</dt><dd id="time">—</dd>
-<dt>画面幅</dt><dd id="width">—</dd>
-<dt>ブラウザtest</dt><dd id="ua">—</dd>
-</dl>
+<section id="start" class="screen">
+  <div>
+    <h1>AR</h1>
+    <p>カメラを起動して、マーカーにかざしてください。</p>
+    <button id="startBtn">はじめる</button>
+    <div id="msg"></div>
+  </div>
+</section>
 
-<button id="btn">JSの動作確認</button><span id="count">0 回</span>
-</main>
+<section id="selfie" class="screen">
+  <video id="selfieVideo" autoplay muted playsinline></video>
+  <button id="backBtn">ARにもどる</button>
+</section>
 
-<script>
-document.getElementById('url').textContent = location.href;
-document.getElementById('ua').textContent = navigator.userAgent;
-const tick = () => document.getElementById('time').textContent = new Date().toLocaleString('ja-JP');
-const size = () => document.getElementById('width').textContent = innerWidth + ' px';
-tick(); size();
-setInterval(tick, 1000);
-addEventListener('resize', size);
+<script type="module">
+import * as THREE from 'three';
+import { MindARThree } from 'mindar-image-three';
 
-let n = 0;
-document.getElementById('btn').addEventListener('click', () => {
-document.getElementById('count').textContent = (++n) + ' 回';
+// targets.mind に入っているマーカーの順番
+const TARGET = { camera: 0, guitar: 1, ramen: 2, beach: 3 };
+
+const startScreen = document.getElementById('start');
+const startBtn = document.getElementById('startBtn');
+const msg = document.getElementById('msg');
+const selfie = document.getElementById('selfie');
+const selfieVideo = document.getElementById('selfieVideo');
+const backBtn = document.getElementById('backBtn');
+
+const mindar = new MindARThree({
+  container: document.getElementById('ar'),
+  imageTargetSrc: './targets.mind',
+  maxTrack: 1,
+  filterMinCF: 0.0001,
+  filterBeta: 0.001,
+});
+const { renderer, scene, camera } = mindar;
+
+// ---- ラーメン：マーカーの上に動画を重ねる ----
+const ramenVideo = document.createElement('video');
+ramenVideo.src = './assets/ramen.mp4';
+ramenVideo.muted = true;
+ramenVideo.loop = true;
+ramenVideo.playsInline = true;
+ramenVideo.setAttribute('playsinline', '');
+ramenVideo.setAttribute('webkit-playsinline', '');
+ramenVideo.preload = 'auto';
+ramenVideo.crossOrigin = 'anonymous';
+
+const ramenTex = new THREE.VideoTexture(ramenVideo);
+ramenTex.colorSpace = THREE.SRGBColorSpace;
+const ramenPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1), // マーカーと同じ大きさ（正方形）
+  new THREE.MeshBasicMaterial({ map: ramenTex })
+);
+const ramenAnchor = mindar.addAnchor(TARGET.ramen);
+ramenAnchor.group.add(ramenPlane);
+ramenAnchor.onTargetFound = () => {
+  ramenVideo.currentTime = 0;
+  ramenVideo.play().catch(() => {});
+};
+ramenAnchor.onTargetLost = () => ramenVideo.pause();
+
+// ---- ギター・海：アニメーション待ち（認識確認用の仮表示） ----
+function placeholder(label) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,.55)';
+  g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = '#f5c400';
+  g.lineWidth = 12;
+  g.strokeRect(6, 6, 500, 500);
+  g.fillStyle = '#fff';
+  g.font = 'bold 64px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(label, 256, 220);
+  g.font = '36px sans-serif';
+  g.fillText('準備中', 256, 310);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+  );
+}
+mindar.addAnchor(TARGET.guitar).group.add(placeholder('GUITAR'));
+mindar.addAnchor(TARGET.beach).group.add(placeholder('BEACH'));
+
+// ---- カメラ：内カメに切り替える ----
+let selfieStream = null;
+let switching = false;
+
+const cameraAnchor = mindar.addAnchor(TARGET.camera);
+cameraAnchor.onTargetFound = () => {
+  if (!switching) openSelfie();
+};
+
+async function openSelfie() {
+  switching = true;
+  ramenVideo.pause();
+  renderer.setAnimationLoop(null);
+  mindar.stop();
+  // 止めた時点の「見えている」状態を消しておく（再開時に誤反応しないように）
+  for (const a of mindar.anchors) { a.visible = false; a.group.visible = false; }
+
+  try {
+    selfieStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: 'user' },
+    });
+    selfieVideo.srcObject = selfieStream;
+    await selfieVideo.play().catch(() => {});
+    selfie.classList.add('on');
+  } catch (e) {
+    console.error(e);
+    alert('内カメラを起動できませんでした。');
+    await startAR();
+  }
+  switching = false;
+}
+
+backBtn.addEventListener('click', async () => {
+  backBtn.disabled = true;
+  if (selfieStream) selfieStream.getTracks().forEach(t => t.stop());
+  selfieStream = null;
+  selfieVideo.srcObject = null;
+  selfie.classList.remove('on');
+  await startAR();
+  backBtn.disabled = false;
+});
+
+// ---- 起動 ----
+async function startAR() {
+  await mindar.start();
+  renderer.setAnimationLoop(() => renderer.render(scene, camera));
+}
+
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  msg.textContent = 'カメラを起動しています…';
+  // iOS で動画を再生できるよう、タップの中で一度再生しておく
+  ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
+  try {
+    await startAR();
+    startScreen.remove();
+  } catch (e) {
+    console.error(e);
+    msg.textContent = 'カメラを起動できませんでした。ブラウザのカメラ許可を確認してください。';
+    startBtn.disabled = false;
+  }
 });
 </script>
 </body>
