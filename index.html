@@ -52,28 +52,6 @@ button {
 }
 button:disabled { opacity: .5; }
 #msg { margin-top: 16px; color: var(--muted); font-size: 13px; min-height: 1em; }
-
-/* 内カメ画面 */
-#selfie {
-  display: none;
-  background: #000;
-  padding: 0;
-}
-#selfie.on { display: block; }
-#selfie video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-}
-#selfie button {
-  position: absolute;
-  left: 50%;
-  bottom: calc(24px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-}
 </style>
 <script type="importmap">
 {
@@ -97,11 +75,6 @@ button:disabled { opacity: .5; }
   </div>
 </section>
 
-<section id="selfie" class="screen">
-  <video id="selfieVideo" autoplay muted playsinline></video>
-  <button id="backBtn">ARにもどる</button>
-</section>
-
 <script type="module">
 import * as THREE from 'three';
 import { MindARThree } from 'mindar-image-three';
@@ -112,9 +85,6 @@ const TARGET = { camera: 0, guitar: 1, ramen: 2, beach: 3 };
 const startScreen = document.getElementById('start');
 const startBtn = document.getElementById('startBtn');
 const msg = document.getElementById('msg');
-const selfie = document.getElementById('selfie');
-const selfieVideo = document.getElementById('selfieVideo');
-const backBtn = document.getElementById('backBtn');
 
 const mindar = new MindARThree({
   container: document.getElementById('ar'),
@@ -178,48 +148,76 @@ function placeholder(label) {
 mindar.addAnchor(TARGET.guitar).group.add(placeholder('GUITAR'));
 mindar.addAnchor(TARGET.beach).group.add(placeholder('BEACH'));
 
-// ---- カメラ：内カメに切り替える ----
-let selfieStream = null;
-let switching = false;
+// ---- カメラ：起動時に撮った顔写真を、スマホの枠の画面に入れて出す ----
+// assets/phone-frame.png の画面部分（1000px 四方の画像での位置）
+const SCREEN = { x: 295, y: 334, w: 498, h: 366 };
+const phoneFrame = new Image();
+phoneFrame.src = './assets/phone-frame.png';
 
-const cameraAnchor = mindar.addAnchor(TARGET.camera);
-cameraAnchor.onTargetFound = () => {
-  if (!switching) openSelfie();
-};
+const phoneCanvas = document.createElement('canvas');
+phoneCanvas.width = phoneCanvas.height = 1000;
+const phoneTex = new THREE.CanvasTexture(phoneCanvas);
+phoneTex.colorSpace = THREE.SRGBColorSpace;
+const phonePlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: phoneTex })
+);
+mindar.addAnchor(TARGET.camera).group.add(phonePlane);
 
-async function openSelfie() {
-  switching = true;
-  ramenVideo.pause();
-  renderer.setAnimationLoop(null);
-  mindar.stop();
-  // 止めた時点の「見えている」状態を消しておく（再開時に誤反応しないように）
-  for (const a of mindar.anchors) { a.visible = false; a.group.visible = false; }
+let selfiePhoto = null; // 撮った写真（canvas）
 
-  try {
-    selfieStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: 'user' },
-    });
-    selfieVideo.srcObject = selfieStream;
-    await selfieVideo.play().catch(() => {});
-    selfie.classList.add('on');
-  } catch (e) {
-    console.error(e);
-    alert('内カメラを起動できませんでした。');
-    await startAR();
+function drawPhone() {
+  const g = phoneCanvas.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, 1000, 1000);
+  if (selfiePhoto) {
+    // 画面の形に合わせて中央を切り抜く（顔が入りやすいよう少し上寄せ）
+    const pw = selfiePhoto.width, ph = selfiePhoto.height;
+    const s = Math.max(SCREEN.w / pw, SCREEN.h / ph);
+    const sw = SCREEN.w / s, sh = SCREEN.h / s;
+    const sx = (pw - sw) / 2, sy = (ph - sh) * 0.4;
+    g.drawImage(selfiePhoto, sx, sy, sw, sh, SCREEN.x, SCREEN.y, SCREEN.w, SCREEN.h);
   }
-  switching = false;
+  if (phoneFrame.complete) g.drawImage(phoneFrame, 0, 0, 1000, 1000);
+  phoneTex.needsUpdate = true;
 }
+phoneFrame.onload = drawPhone;
 
-backBtn.addEventListener('click', async () => {
-  backBtn.disabled = true;
-  if (selfieStream) selfieStream.getTracks().forEach(t => t.stop());
-  selfieStream = null;
-  selfieVideo.srcObject = null;
-  selfie.classList.remove('on');
-  await startAR();
-  backBtn.disabled = false;
-});
+// 内カメで1枚撮る。写真は端末の中だけで使い、どこにも送らない
+async function captureSelfie() {
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } },
+    });
+    const v = document.createElement('video');
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute('playsinline', '');
+    v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(v);
+    v.srcObject = stream;
+    await v.play();
+    // 起動直後は暗いので、露出が落ち着くまで少し待つ
+    await new Promise(r => setTimeout(r, 700));
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const g = c.getContext('2d');
+    // 内カメは鏡に映したように左右反転しておく
+    g.translate(c.width, 0);
+    g.scale(-1, 1);
+    g.drawImage(v, 0, 0);
+    v.remove();
+    selfiePhoto = c;
+    drawPhone();
+  } catch (e) {
+    console.warn('内カメで撮影できませんでした', e);
+  } finally {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+}
 
 // ---- 起動 ----
 async function startAR() {
@@ -233,6 +231,8 @@ startBtn.addEventListener('click', async () => {
   // iOS で動画を再生できるよう、タップの中で一度再生しておく
   ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
   try {
+    // 先に内カメで撮ってから、背面カメラの AR を始める（スマホは同時に2つのカメラを使えない）
+    await captureSelfie();
     await startAR();
     startScreen.remove();
   } catch (e) {
