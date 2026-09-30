@@ -275,7 +275,7 @@ ramenAnchor.onTargetFound = () => {
 };
 ramenAnchor.onTargetLost = () => ramenVideo.pause();
 
-// ---- ギター・海：アニメーション待ち（認識確認用の仮表示） ----
+// ---- ギター：アニメーション待ち（認識確認用の仮表示） ----
 function placeholder(label) {
   const c = document.createElement('canvas');
   c.width = c.height = 512;
@@ -300,7 +300,24 @@ function placeholder(label) {
   );
 }
 addSmoothAnchor(TARGET.guitar).group.add(placeholder('GUITAR'));
-addSmoothAnchor(TARGET.beach).group.add(placeholder('BEACH'));
+
+// ---- 海：波の動画をマーカーに重ねて、ずっとループ再生する ----
+const seaVideo = document.createElement('video');
+seaVideo.src = './assets/sea.mp4';
+seaVideo.muted = true;
+seaVideo.loop = true;
+seaVideo.playsInline = true;
+seaVideo.setAttribute('playsinline', '');
+seaVideo.setAttribute('webkit-playsinline', '');
+seaVideo.preload = 'auto';
+seaVideo.crossOrigin = 'anonymous';
+
+const seaTex = new THREE.VideoTexture(seaVideo);
+seaTex.colorSpace = THREE.SRGBColorSpace;
+const { anchor: seaAnchor, group: seaGroup } = addSmoothAnchor(TARGET.beach);
+seaGroup.add(edgePlane(seaTex));
+seaAnchor.onTargetFound = () => seaVideo.play().catch(() => {});
+seaAnchor.onTargetLost = () => seaVideo.pause();
 
 // ---- カメラ：起動時に撮った顔写真を、スマホの枠の画面に入れて出す ----
 // assets/phone-frame.png の画面部分（1000px 四方の画像での位置）
@@ -480,6 +497,7 @@ startBtn.addEventListener('click', async () => {
   msg.textContent = 'カメラを起動しています…';
   // iOS で動画を再生できるよう、タップの中で一度再生しておく
   ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
+  seaVideo.play().then(() => seaVideo.pause()).catch(() => {});
   // ジャイロの許可も、タップの中で最初に聞く必要がある
   const gyroPermission = requestGyroPermission();
   try {
