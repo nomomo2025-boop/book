@@ -145,8 +145,8 @@ const ramenPlane = new THREE.Mesh(
 const ramenAnchor = mindar.addAnchor(TARGET.ramen);
 ramenAnchor.group.add(ramenPlane);
 ramenAnchor.onTargetFound = () => {
-  // 途中で見失った場合は続きから、見終わったあとに映し直したら最初から
-  if (ramenVideo.ended) ramenVideo.currentTime = 0;
+  // 途中で見失った場合は続きから。一度見終わったら、映し直しても最後のコマのまま
+  if (ramenVideo.ended) return;
   ramenVideo.play().catch(() => {});
 };
 ramenAnchor.onTargetLost = () => ramenVideo.pause();
