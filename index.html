@@ -275,49 +275,29 @@ ramenAnchor.onTargetFound = () => {
 };
 ramenAnchor.onTargetLost = () => ramenVideo.pause();
 
-// ---- ギター：アニメーション待ち（認識確認用の仮表示） ----
-function placeholder(label) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 512;
-  const g = c.getContext('2d');
-  g.fillStyle = 'rgba(0,0,0,.55)';
-  g.fillRect(0, 0, 512, 512);
-  g.strokeStyle = '#f5c400';
-  g.lineWidth = 12;
-  g.strokeRect(6, 6, 500, 500);
-  g.fillStyle = '#fff';
-  g.font = 'bold 64px sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText(label, 256, 220);
-  g.font = '36px sans-serif';
-  g.fillText('準備中', 256, 310);
-  const tex = new THREE.CanvasTexture(c);
+// ---- ギター・海：動画をマーカーに重ねて、ずっとループ再生する ----
+// マーカーから外れたら一時停止し、映し直すと続きから動く
+function addLoopVideo(target, src) {
+  const video = document.createElement('video');
+  video.src = src;
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.preload = 'auto';
+  video.crossOrigin = 'anonymous';
+
+  const tex = new THREE.VideoTexture(video);
   tex.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true })
-  );
+  const { anchor, group } = addSmoothAnchor(target);
+  group.add(edgePlane(tex));
+  anchor.onTargetFound = () => video.play().catch(() => {});
+  anchor.onTargetLost = () => video.pause();
+  return video;
 }
-addSmoothAnchor(TARGET.guitar).group.add(placeholder('GUITAR'));
-
-// ---- 海：波の動画をマーカーに重ねて、ずっとループ再生する ----
-const seaVideo = document.createElement('video');
-seaVideo.src = './assets/sea.mp4';
-seaVideo.muted = true;
-seaVideo.loop = true;
-seaVideo.playsInline = true;
-seaVideo.setAttribute('playsinline', '');
-seaVideo.setAttribute('webkit-playsinline', '');
-seaVideo.preload = 'auto';
-seaVideo.crossOrigin = 'anonymous';
-
-const seaTex = new THREE.VideoTexture(seaVideo);
-seaTex.colorSpace = THREE.SRGBColorSpace;
-const { anchor: seaAnchor, group: seaGroup } = addSmoothAnchor(TARGET.beach);
-seaGroup.add(edgePlane(seaTex));
-seaAnchor.onTargetFound = () => seaVideo.play().catch(() => {});
-seaAnchor.onTargetLost = () => seaVideo.pause();
+const liveVideo = addLoopVideo(TARGET.guitar, './assets/live.mp4');
+const seaVideo = addLoopVideo(TARGET.beach, './assets/sea.mp4');
 
 // ---- カメラ：起動時に撮った顔写真を、スマホの枠の画面に入れて出す ----
 // assets/phone-frame.png の画面部分（1000px 四方の画像での位置）
@@ -497,7 +477,7 @@ startBtn.addEventListener('click', async () => {
   msg.textContent = 'カメラを起動しています…';
   // iOS で動画を再生できるよう、タップの中で一度再生しておく
   ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
-  seaVideo.play().then(() => seaVideo.pause()).catch(() => {});
+  for (const v of [liveVideo, seaVideo]) v.play().then(() => v.pause()).catch(() => {});
   // ジャイロの許可も、タップの中で最初に聞く必要がある
   const gyroPermission = requestGyroPermission();
   try {
