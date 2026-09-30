@@ -86,12 +86,29 @@ const startScreen = document.getElementById('start');
 const startBtn = document.getElementById('startBtn');
 const msg = document.getElementById('msg');
 
+// 追従の調整値。URL の後ろに ?cf=0.001&beta=0.01&warm=3&miss=10 のように付けると、
+// 公開し直さずに実機で試せる
+//   cf   : 止まっているときの揺れ止め。小さいほど揺れないが、遅れてついてくる
+//   beta : 動かしたときの追いつきやすさ。大きいほど遅れないが、揺れが残る
+//   warm : 何コマ続けて見えたら表示するか（小さいほど早く出るが、誤反応しやすい）
+//   miss : 何コマ見失ったら消すか（大きいほど一瞬見失っても消えない）
+const params = new URLSearchParams(location.search);
+const num = (key, def) => {
+  const v = parseFloat(params.get(key));
+  return Number.isFinite(v) ? v : def;
+};
+const TRACKING = {
+  filterMinCF: num('cf', 0.001),
+  filterBeta: num('beta', 0.01),
+  warmupTolerance: num('warm', 3),
+  missTolerance: num('miss', 10),
+};
+
 const mindar = new MindARThree({
   container: document.getElementById('ar'),
   imageTargetSrc: './targets.mind',
   maxTrack: 1,
-  filterMinCF: 0.0001,
-  filterBeta: 0.001,
+  ...TRACKING,
 });
 const { renderer, scene, camera } = mindar;
 
@@ -296,6 +313,24 @@ async function captureSelfie() {
     if (stream) stream.getTracks().forEach(t => t.stop());
   }
 }
+
+// ---- もう一度サイトを開いたときは最初からやり直す ----
+// iPhone の Safari は、戻る操作や QR から開き直したときに前のページを
+// そのまま復元することがある。その場合は読み込み直して、動画の再生位置などを戻す
+addEventListener('pageshow', e => {
+  if (e.persisted) location.reload();
+});
+// 別のアプリに切り替えて、しばらくしてから戻ってきたときも同じくやり直す
+// （通知を見るような短い切り替えではやり直さない）
+const RESET_AFTER_HIDDEN_MS = 10000;
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+  } else if (hiddenAt && Date.now() - hiddenAt > RESET_AFTER_HIDDEN_MS) {
+    location.reload();
+  }
+});
 
 // ---- 起動 ----
 async function startAR() {
