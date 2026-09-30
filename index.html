@@ -320,9 +320,9 @@ async function captureSelfie() {
 addEventListener('pageshow', e => {
   if (e.persisted) location.reload();
 });
-// 別のアプリに切り替えて、しばらくしてから戻ってきたときも同じくやり直す
+// 別のアプリに切り替えて、1分以上たってから戻ってきたときも同じくやり直す
 // （通知を見るような短い切り替えではやり直さない）
-const RESET_AFTER_HIDDEN_MS = 10000;
+const RESET_AFTER_HIDDEN_MS = 60000;
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
