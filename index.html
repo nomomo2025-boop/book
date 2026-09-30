@@ -122,6 +122,40 @@ const SMOOTH = {
   rest: num('smooth', 0.06),
   move: num('move', 0.04),
 };
+// ---- ジャイロで補う ----
+// カメラ画像からの位置計算は1秒に数十回しか出ず、しかも少し遅れて届く。
+// その間にスマホを回した分を、向きのセンサーから求めて先回りして映像を回す。
+// URL に ?gyro=0 を付けると切れる（比較用）
+const gyro = {
+  enabled: num('gyro', 1) !== 0,
+  ready: false,
+  quat: new THREE.Quaternion(), // いまのカメラの向き（世界の中で）
+};
+{
+  const euler = new THREE.Euler();
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const screenFix = new THREE.Quaternion();
+  // スマホの画面の向き（x:右, y:上, z:手前）から、背面カメラの向きに合わせる補正
+  const cameraFix = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+  const deg = Math.PI / 180;
+  addEventListener('deviceorientation', e => {
+    if (!gyro.enabled || e.alpha === null) return;
+    const orient = (screen.orientation?.angle ?? window.orientation ?? 0) * deg;
+    euler.set(e.beta * deg, e.alpha * deg, -e.gamma * deg, 'YXZ');
+    gyro.quat.setFromEuler(euler).multiply(cameraFix)
+      .multiply(screenFix.setFromAxisAngle(zAxis, -orient));
+    gyro.ready = true;
+  });
+}
+// iPhone ではセンサーを使うのに許可が要る。「はじめる」を押したときに呼ぶ
+function requestGyroPermission() {
+  const D = window.DeviceOrientationEvent;
+  if (gyro.enabled && D && typeof D.requestPermission === 'function') {
+    return D.requestPermission().catch(() => 'denied');
+  }
+  return Promise.resolve('granted');
+}
+
 const smoothed = [];
 function addSmoothAnchor(index) {
   const anchor = mindar.addAnchor(index);
@@ -129,14 +163,22 @@ function addSmoothAnchor(index) {
   group.matrixAutoUpdate = false;
   group.visible = false;
   scene.add(group);
-  smoothed.push({
+  const s = {
     anchor, group, ready: false,
     pos: new THREE.Vector3(), quat: new THREE.Quaternion(), scale: new THREE.Vector3(),
-  });
+    trackQuat: new THREE.Quaternion(), hasTrackQuat: false,
+  };
+  // 位置の計算結果が届いた瞬間のスマホの向きを覚えておく
+  anchor.onTargetUpdate = () => {
+    s.hasTrackQuat = gyro.ready;
+    if (gyro.ready) s.trackQuat.copy(gyro.quat);
+  };
+  smoothed.push(s);
   return { anchor, group };
 }
 
 const tPos = new THREE.Vector3(), tQuat = new THREE.Quaternion(), tScale = new THREE.Vector3();
+const turn = new THREE.Quaternion(), turnMatrix = new THREE.Matrix4(), predicted = new THREE.Matrix4();
 let lastFrame = 0;
 function updateSmoothing(now) {
   // 60fps を1コマとして、コマ落ちしても同じ速さで追いつくようにする
@@ -148,7 +190,13 @@ function updateSmoothing(now) {
       s.ready = false;
       continue;
     }
-    s.anchor.group.matrix.decompose(tPos, tQuat, tScale);
+    predicted.copy(s.anchor.group.matrix);
+    if (gyro.ready && s.hasTrackQuat) {
+      // 計算結果が届いてから今までにスマホが回った分だけ、マーカーを逆向きに回す
+      turn.copy(gyro.quat).invert().multiply(s.trackQuat);
+      predicted.premultiply(turnMatrix.makeRotationFromQuaternion(turn));
+    }
+    predicted.decompose(tPos, tQuat, tScale);
     if (!s.ready) {
       // 見つけた瞬間はそのまま置く
       s.pos.copy(tPos); s.quat.copy(tQuat); s.scale.copy(tScale);
@@ -171,6 +219,39 @@ function updateSmoothing(now) {
   }
 }
 
+// ---- 映像の縁 ----
+// 映像をマーカーより少し大きくして、縁をふわっと透明にする。
+// 少しずれても下のマーカーの縁がはみ出して見えにくくなる
+const EDGE = {
+  size: num('edge', 1.06), // マーカーに対する大きさ
+  fade: 0.06,              // 縁から何割の幅でぼかすか
+};
+const edgeAlpha = (() => {
+  const n = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d');
+  const img = g.createImageData(n, n);
+  const smooth = t => t * t * (3 - 2 * t);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const d = Math.min(x, y, n - 1 - x, n - 1 - y) / (n - 1); // 一番近い縁までの距離
+      const v = Math.round(255 * smooth(Math.min(1, d / EDGE.fade)));
+      const i = (y * n + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+})();
+function edgePlane(map) {
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(EDGE.size, EDGE.size),
+    new THREE.MeshBasicMaterial({ map, alphaMap: edgeAlpha, transparent: true })
+  );
+}
+
 // ---- ラーメン：マーカーの上に動画を重ねる ----
 const ramenVideo = document.createElement('video');
 ramenVideo.src = './assets/ramen.mp4';
@@ -184,10 +265,7 @@ ramenVideo.crossOrigin = 'anonymous';
 
 const ramenTex = new THREE.VideoTexture(ramenVideo);
 ramenTex.colorSpace = THREE.SRGBColorSpace;
-const ramenPlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(1, 1), // マーカーと同じ大きさ（正方形）
-  new THREE.MeshBasicMaterial({ map: ramenTex })
-);
+const ramenPlane = edgePlane(ramenTex);
 const { anchor: ramenAnchor, group: ramenGroup } = addSmoothAnchor(TARGET.ramen);
 ramenGroup.add(ramenPlane);
 ramenAnchor.onTargetFound = () => {
@@ -234,10 +312,7 @@ const phoneCanvas = document.createElement('canvas');
 phoneCanvas.width = phoneCanvas.height = 1000;
 const phoneTex = new THREE.CanvasTexture(phoneCanvas);
 phoneTex.colorSpace = THREE.SRGBColorSpace;
-const phonePlane = new THREE.Mesh(
-  new THREE.PlaneGeometry(1, 1),
-  new THREE.MeshBasicMaterial({ map: phoneTex })
-);
+const phonePlane = edgePlane(phoneTex);
 addSmoothAnchor(TARGET.camera).group.add(phonePlane);
 
 let selfiePhoto = null; // 撮った写真（canvas、左右反転済み）
@@ -405,8 +480,11 @@ startBtn.addEventListener('click', async () => {
   msg.textContent = 'カメラを起動しています…';
   // iOS で動画を再生できるよう、タップの中で一度再生しておく
   ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
+  // ジャイロの許可も、タップの中で最初に聞く必要がある
+  const gyroPermission = requestGyroPermission();
   try {
     // 先に内カメで撮ってから、背面カメラの AR を始める（スマホは同時に2つのカメラを使えない）
+    await gyroPermission;
     await captureSelfie();
     await startAR();
     startScreen.remove();
