@@ -182,29 +182,30 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #viewer img { max-width: 100%; max-height: 100%; -webkit-touch-callout: default; user-select: auto; }
 #viewer p { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; color: var(--muted); font-size: 12px; }
 
-/* ---- 最初の画面 ---- */
-#start {
-  position: fixed;
+/* ファインダーの中に出す案内（起動中・カメラが使えないとき） */
+#notice {
+  position: absolute;
   inset: 0;
-  z-index: 10;
+  z-index: 4;
   display: grid;
   place-items: center;
-  padding: 24px 16px;
+  align-content: center;
+  gap: 16px;
+  padding: 24px;
   text-align: center;
-  background: var(--bg);
+  background: #000;
+  transition: opacity .3s;
 }
-#start h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; letter-spacing: .04em; }
-#start p { margin: 0 0 28px; color: var(--muted); line-height: 1.7; font-size: 14px; }
-#startBtn {
-  padding: 14px 32px;
+#notice.hide { opacity: 0; pointer-events: none; }
+#msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+#retryBtn {
+  padding: 10px 22px;
   border-radius: 999px;
   background: var(--yellow);
   color: #000;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 15px;
 }
-#startBtn:disabled { opacity: .5; }
-#msg { margin-top: 16px; color: var(--muted); font-size: 13px; min-height: 1em; }
 </style>
 <script type="importmap">
 {
@@ -241,6 +242,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
     <div id="ar"></div>
     <div id="zoom" aria-hidden="true"><span>.5</span><span class="on">1×</span><span>2</span></div>
     <div id="blink"></div>
+    <div id="notice"><p id="msg">カメラを起動しています…</p><button id="retryBtn" hidden>もう一度試す</button></div>
   </div>
 
   <div id="bottom">
@@ -268,14 +270,6 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   <p>写真を長押しすると保存できます</p>
 </section>
 
-<section id="start">
-  <div>
-    <h1>AR</h1>
-    <p>カメラを起動して、マーカーにかざしてください。</p>
-    <button id="startBtn">はじめる</button>
-    <div id="msg"></div>
-  </div>
-</section>
 
 <script type="module">
 import * as THREE from 'three';
@@ -284,9 +278,9 @@ import { MindARThree } from 'mindar-image-three';
 // targets.mind に入っているマーカーの順番
 const TARGET = { camera: 0, guitar: 1, ramen: 2, beach: 3 };
 
-const startScreen = document.getElementById('start');
-const startBtn = document.getElementById('startBtn');
+const notice = document.getElementById('notice');
 const msg = document.getElementById('msg');
+const retryBtn = document.getElementById('retryBtn');
 
 // 追従の調整値。URL の後ろに ?cf=0.001&beta=0.01&warm=3&miss=10 のように付けると、
 // 公開し直さずに実機で試せる
@@ -741,27 +735,36 @@ async function startAR() {
   });
 }
 
-startBtn.addEventListener('click', async () => {
-  startBtn.disabled = true;
-  enterFullscreen();
+// ページを開いたらすぐにカメラを起動する（カメラの許可はブラウザがその場で聞いてくる）
+async function boot() {
+  retryBtn.hidden = true;
   msg.textContent = 'カメラを起動しています…';
-  // iOS で動画を再生できるよう、タップの中で一度再生しておく
-  ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
-  for (const v of [liveVideo, seaVideo]) v.play().then(() => v.pause()).catch(() => {});
-  // ジャイロの許可も、タップの中で最初に聞く必要がある
-  const gyroPermission = requestGyroPermission();
+  notice.classList.remove('hide');
   try {
     // 先に内カメで撮ってから、背面カメラの AR を始める（スマホは同時に2つのカメラを使えない）
-    await gyroPermission;
     await captureSelfie();
     await startAR();
-    startScreen.remove();
+    notice.classList.add('hide');
   } catch (e) {
     console.error(e);
-    msg.textContent = 'カメラを起動できませんでした。ブラウザのカメラ許可を確認してください。';
-    startBtn.disabled = false;
+    msg.textContent = 'カメラを使えませんでした。ブラウザの設定でカメラを許可してから、もう一度試してください。';
+    retryBtn.hidden = false;
   }
-});
+}
+retryBtn.addEventListener('click', () => location.reload());
+
+// ジャイロの許可と全画面は、画面に触れたときでないと頼めない。最初に触れたときに一度だけ行う
+let firstTouchDone = false;
+function onFirstTouch() {
+  if (firstTouchDone) return;
+  firstTouchDone = true;
+  enterFullscreen();
+  requestGyroPermission();
+}
+addEventListener('touchend', onFirstTouch, { capture: true });
+addEventListener('click', onFirstTouch, { capture: true });
+
+boot();
 </script>
 </body>
 </html>
