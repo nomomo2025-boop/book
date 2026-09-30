@@ -1,0 +1,10 @@
+{
+  "name": "カメラ",
+  "short_name": "カメラ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}

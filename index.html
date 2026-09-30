@@ -3,54 +3,207 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>AR</title>
+<meta name="theme-color" content="#000000">
+<!-- ホーム画面に追加して開くと、Safari のバーなしの全画面になる -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="カメラ">
+<link rel="manifest" href="./manifest.webmanifest">
+<title>カメラ</title>
 <style>
 :root {
-  --bg: #111;
-  --fg: #f4f1ea;
-  --muted: #a9a59c;
-  --accent: #f5c400;
+  --bg: #000;
+  --fg: #fff;
+  --muted: #8e8e93;
+  --yellow: #ffd60a;
+  --top: calc(env(safe-area-inset-top) + 44px);
 }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
 }
-#ar {
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* ---- カメラアプリ風の画面 ---- */
+#cam {
   position: fixed;
   inset: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+#topbar {
+  flex: none;
+  height: var(--top);
+  padding: env(safe-area-inset-top) 18px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#topbar svg { display: block; }
+#viewfinder {
+  position: relative;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: calc(100% - var(--top) - 170px);
+  overflow: hidden;
+  background: #111;
+}
+/* z-index を付けて重なりの基準にしないと、MindAR のカメラ映像が背景の下に隠れる */
+#ar { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+#blink {
+  position: absolute; inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+#blink.on { animation: blink .22s ease-out; }
+@keyframes blink { 0% { opacity: 1; } 100% { opacity: 0; } }
+#zoom {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .28);
+  z-index: 2;
+}
+#zoom span {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .45);
+  font-size: 11px;
+  font-weight: 600;
+}
+#zoom span.on {
+  width: 36px; height: 36px; margin: -3px 0;
+  color: var(--yellow);
+  font-size: 13px;
+}
+#bottom {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  padding-bottom: env(safe-area-inset-bottom);
+  min-height: 170px;
+}
+#modes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 22px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  white-space: nowrap;
   overflow: hidden;
 }
-.screen {
+#modes .side { display: flex; gap: 22px; color: var(--fg); opacity: .95; min-width: 0; overflow: hidden; }
+/* 左側は右端（写真のすぐ隣）にそろえ、はみ出した分は左で切る */
+#modes .left { flex-direction: row-reverse; }
+#modes .now { color: var(--yellow); font-weight: 600; }
+#controls {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0 30px;
+}
+#thumb {
+  justify-self: start;
+  width: 48px; height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, .15);
+}
+#thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#shutter {
+  width: 76px; height: 76px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  display: grid;
+  place-items: center;
+}
+#shutter::after {
+  content: "";
+  width: 62px; height: 62px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .12s;
+}
+#shutter:active::after { transform: scale(.9); }
+#flip {
+  justify-self: end;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .12);
+  display: grid;
+  place-items: center;
+  transition: transform .4s;
+}
+#flip.spin { transform: rotate(180deg); }
+
+/* 撮った写真を見る画面（長押しで保存できる） */
+#viewer {
+  position: fixed; inset: 0;
+  background: #000;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+}
+#viewer.on { display: flex; }
+#viewer header {
+  height: var(--top);
+  padding: env(safe-area-inset-top) 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+}
+#viewer header button { color: var(--yellow); font-size: 17px; }
+#viewer .photo { flex: 1; display: grid; place-items: center; overflow: hidden; }
+#viewer img { max-width: 100%; max-height: 100%; -webkit-touch-callout: default; user-select: auto; }
+#viewer p { margin: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ---- 最初の画面 ---- */
+#start {
   position: fixed;
   inset: 0;
+  z-index: 10;
   display: grid;
   place-items: center;
   padding: 24px 16px;
   text-align: center;
-  z-index: 10;
+  background: var(--bg);
 }
-#start { background: var(--bg); }
-#start h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: .04em; }
+#start h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; letter-spacing: .04em; }
 #start p { margin: 0 0 28px; color: var(--muted); line-height: 1.7; font-size: 14px; }
-button {
-  padding: 14px 28px;
-  border: 0;
+#startBtn {
+  padding: 14px 32px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #111;
-  font: inherit;
+  background: var(--yellow);
+  color: #000;
   font-weight: 700;
   font-size: 16px;
-  cursor: pointer;
 }
-button:disabled { opacity: .5; }
+#startBtn:disabled { opacity: .5; }
 #msg { margin-top: 16px; color: var(--muted); font-size: 13px; min-height: 1em; }
 </style>
 <script type="importmap">
@@ -64,9 +217,58 @@ button:disabled { opacity: .5; }
 </script>
 </head>
 <body>
-<div id="ar"></div>
+<div id="cam">
+  <div id="topbar">
+    <!-- フラッシュ（オフ） -->
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#fff" stroke-width="1.6" aria-hidden="true">
+      <circle cx="13" cy="13" r="11.5"/>
+      <path d="M14.2 6.5 9 14h3.6l-1 5.5L17 12h-3.6z" fill="#fff" stroke="none"/>
+      <path d="M6 6l14 14" stroke-linecap="round"/>
+    </svg>
+    <!-- 設定を開く山形 -->
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M6 13.5 11 8.5l5 5"/>
+    </svg>
+    <!-- Live Photos -->
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#fff" aria-hidden="true">
+      <circle cx="13" cy="13" r="11.5" stroke-width="1.4" stroke-dasharray="1.6 2.2"/>
+      <circle cx="13" cy="13" r="7.2" stroke-width="1.6"/>
+      <circle cx="13" cy="13" r="3" fill="#fff" stroke="none"/>
+    </svg>
+  </div>
 
-<section id="start" class="screen">
+  <div id="viewfinder">
+    <div id="ar"></div>
+    <div id="zoom" aria-hidden="true"><span>.5</span><span class="on">1×</span><span>2</span></div>
+    <div id="blink"></div>
+  </div>
+
+  <div id="bottom">
+    <div id="modes" aria-hidden="true">
+      <div class="side left"><span>ビデオ</span><span>スロー</span><span>タイムラプス</span></div>
+      <span class="now">写真</span>
+      <div class="side"><span>ポートレート</span><span>パノラマ</span></div>
+    </div>
+    <div id="controls">
+      <button id="thumb" aria-label="撮った写真を見る"></button>
+      <button id="shutter" aria-label="撮影"></button>
+      <button id="flip" aria-label="カメラ切り替え">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 10.5A8 8 0 0 0 6.2 8.2M5.5 15.5a8 8 0 0 0 14.3 2.3"/>
+          <path d="M6 4.5v4h4M20 21.5v-4h-4"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<section id="viewer">
+  <header><span id="viewerDate"></span><button id="viewerClose">完了</button></header>
+  <div class="photo"><img id="viewerImg" alt="撮った写真"></div>
+  <p>写真を長押しすると保存できます</p>
+</section>
+
+<section id="start">
   <div>
     <h1>AR</h1>
     <p>カメラを起動して、マーカーにかざしてください。</p>
@@ -108,6 +310,9 @@ const mindar = new MindARThree({
   container: document.getElementById('ar'),
   imageTargetSrc: './targets.mind',
   maxTrack: 1,
+  // MindAR 自前の「読み込み中」「スキャン中」の表示は出さない（カメラアプリらしく見せるため）
+  uiLoading: 'no',
+  uiScanning: 'no',
   ...TRACKING,
 });
 const { renderer, scene, camera } = mindar;
@@ -463,6 +668,70 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ---- シャッター：いま見えている画面（カメラ映像＋AR）を1枚の写真にする ----
+const viewfinder = document.getElementById('viewfinder');
+const blink = document.getElementById('blink');
+const thumb = document.getElementById('thumb');
+const viewer = document.getElementById('viewer');
+const viewerImg = document.getElementById('viewerImg');
+const viewerDate = document.getElementById('viewerDate');
+let lastShot = null;
+
+function takePhoto() {
+  const video = mindar.video;
+  if (!video || !video.videoWidth) return;
+  const w = viewfinder.clientWidth, h = viewfinder.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * dpr);
+  c.height = Math.round(h * dpr);
+  const g = c.getContext('2d');
+  g.scale(dpr, dpr);
+  // カメラ映像は MindAR が画面いっぱいに引き伸ばして置いているので、同じ位置に描く
+  g.drawImage(video, parseFloat(video.style.left) || 0, parseFloat(video.style.top) || 0,
+    parseFloat(video.style.width) || w, parseFloat(video.style.height) || h);
+  // AR の絵は、描いた直後でないと読み出せないので、ここでもう一度描いてから重ねる
+  renderer.render(scene, camera);
+  g.drawImage(renderer.domElement, 0, 0, w, h);
+
+  lastShot = { url: c.toDataURL('image/jpeg', 0.92), date: new Date() };
+  thumb.innerHTML = '';
+  const img = new Image();
+  img.src = lastShot.url;
+  img.alt = '';
+  thumb.appendChild(img);
+}
+
+document.getElementById('shutter').addEventListener('click', () => {
+  takePhoto();
+  blink.classList.remove('on');
+  void blink.offsetWidth; // アニメーションを最初からやり直す
+  blink.classList.add('on');
+});
+thumb.addEventListener('click', () => {
+  if (!lastShot) return;
+  viewerImg.src = lastShot.url;
+  viewerDate.textContent = lastShot.date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  viewer.classList.add('on');
+});
+document.getElementById('viewerClose').addEventListener('click', () => viewer.classList.remove('on'));
+// 切り替えボタンは回るだけ（本物のカメラアプリらしさのため）
+const flip = document.getElementById('flip');
+flip.addEventListener('click', () => flip.classList.toggle('spin'));
+
+// ---- 全画面 ----
+// Android などでは「はじめる」を押したときに全画面にする。
+// iPhone の Safari はページを全画面にできないので、ホーム画面に追加して開いたときだけ全画面になる
+function enterFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req || document.fullscreenElement || document.webkitFullscreenElement) return;
+  try {
+    const p = req.call(el, { navigationUI: 'hide' });
+    if (p && p.then) p.then(() => screen.orientation?.lock?.('portrait')).catch(() => {});
+  } catch (e) { /* 全画面にできなくてもそのまま続ける */ }
+}
+
 // ---- 起動 ----
 async function startAR() {
   await mindar.start();
@@ -474,6 +743,7 @@ async function startAR() {
 
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
+  enterFullscreen();
   msg.textContent = 'カメラを起動しています…';
   // iOS で動画を再生できるよう、タップの中で一度再生しておく
   ramenVideo.play().then(() => ramenVideo.pause()).catch(() => {});
