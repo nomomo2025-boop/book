@@ -129,7 +129,7 @@ const { renderer, scene, camera } = mindar;
 const ramenVideo = document.createElement('video');
 ramenVideo.src = './assets/ramen.mp4';
 ramenVideo.muted = true;
-ramenVideo.loop = true;
+ramenVideo.loop = false; // 一回だけ再生して最後のコマで止める
 ramenVideo.playsInline = true;
 ramenVideo.setAttribute('playsinline', '');
 ramenVideo.setAttribute('webkit-playsinline', '');
@@ -145,7 +145,8 @@ const ramenPlane = new THREE.Mesh(
 const ramenAnchor = mindar.addAnchor(TARGET.ramen);
 ramenAnchor.group.add(ramenPlane);
 ramenAnchor.onTargetFound = () => {
-  ramenVideo.currentTime = 0;
+  // 途中で見失った場合は続きから、見終わったあとに映し直したら最初から
+  if (ramenVideo.ended) ramenVideo.currentTime = 0;
   ramenVideo.play().catch(() => {});
 };
 ramenAnchor.onTargetLost = () => ramenVideo.pause();
